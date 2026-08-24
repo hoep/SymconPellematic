@@ -126,6 +126,7 @@ class Pellematic extends IPSModule
         $this->RegisterAttributeInteger('MetaFetched', 0);
         $this->RegisterAttributeInteger('LastRun', 0);
         $this->RegisterAttributeInteger('FailCount', 0);
+        $this->RegisterAttributeInteger('LastOkTs', 0);
         $this->RegisterAttributeInteger('StartsAtMidnight', -1);
         $this->RegisterAttributeInteger('RuntimeAtMidnight', -1);
         $this->RegisterAttributeInteger('LastToday', 0);
@@ -288,6 +289,7 @@ class Pellematic extends IPSModule
             $this->SetTimerInterval('Poll', max(0, $this->ReadPropertyInteger('Interval')) * 1000);
         }
         $this->WriteAttributeInteger('LastRun', time());
+        $this->WriteAttributeInteger('LastOkTs', time());   // Bezugspunkt fuer "noch frisch"
         $this->SetStatus($this->ReadPropertyInteger('Interval') === 0 ? Keys::ST_IDLE : Keys::ST_ACTIVE);
 
         $this->debug('Poll', sprintf('%d Datenpunkte, %d gespiegelt, %.0f ms',
@@ -490,8 +492,18 @@ class Pellematic extends IPSModule
         $n = $this->ReadAttributeInteger('FailCount') + 1;
         $this->WriteAttributeInteger('FailCount', $n);
 
-        $this->SetStatus($code);
-        $this->setzeEigene('Online', false);
+        // Eine geplatzte Anfrage ist noch kein Ausfall.
+        //
+        // Solange eine zweite Stelle dieselbe Anlage abfragt, reisst die
+        // Taktgrenze regelmaessig - die Anlage antwortet dem Zweiten mit 401.
+        // Wuerde die Instanz deswegen jedes Mal auf Rot springen, staende sie
+        // die halbe Zeit auf Rot, obwohl aktuelle Werte vorliegen. Rot heisst
+        // hier: seit drei Runden keine Daten. Bis dahin bleibt der Zustand
+        // gruen, der Fehlertext steht trotzdem in der Diagnosevariablen.
+        $frisch = ($n < 3) && ((time() - $this->ReadAttributeInteger('LastOkTs'))
+            < 3 * max(30, $this->ReadPropertyInteger('Interval')));
+        $this->SetStatus($frisch ? Keys::ST_ACTIVE : $code);
+        $this->setzeEigene('Online', $frisch);
         $this->setzeEigene('Error', date('d.m.Y H:i:s') . ' - ' . $meldung);
         if ($ms > 0) {
             $this->setzeEigene('Duration', round($ms, 1));
