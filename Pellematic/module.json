@@ -1,0 +1,13 @@
+{
+    "id": "{ECC257D1-4FD5-4593-9461-F8AA76DD623C}",
+    "name": "Pellematic",
+    "type": 3,
+    "vendor": "Hoep",
+    "aliases": ["Pellematic", "Oekofen", "OekoFEN", "Pelletronic", "Pelletsheizung"],
+    "url": "https://github.com/hoep/SymconPellematic",
+    "prefix": "OKP",
+    "parentRequirements": [],
+    "childRequirements": [],
+    "implemented": [],
+    "hidden": false
+}

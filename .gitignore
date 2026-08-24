@@ -1,0 +1,11 @@
+# SymconPellematic
+*.log
+.DS_Store
+Thumbs.db
+scratch/
+*.tmp
+*.bak
+*.bak-*
+*.bak.[0-9]*
+backup/
+scripts_backup/

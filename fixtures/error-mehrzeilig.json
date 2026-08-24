@@ -1,0 +1,11 @@
+{
+ "system":{
+  "L_errors":{"val":2, "factor":1, "min":-32768, "max":32767, "text":"Fehler"}
+ },
+ "error":{
+  "error_1":"29-01-2026 18:21:32|PE 1 Aschebox in Kürze voll
+Bitte in den nächsten
+Tagen entleeren[5050]",
+  "error_2":"04-02-2026 16:12:43|PE 1 Pellets Warnung [5054]"
+ }
+}

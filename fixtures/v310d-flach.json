@@ -1,0 +1,46 @@
+{
+ "system":{
+  "L_ambient":"202",
+  "L_errors":"0",
+  "L_usb_stick":"false",
+  "mode":"2"
+ },
+ "hk1":{
+  "L_roomtemp_act":"0",
+  "L_roomtemp_set":"80",
+  "L_flowtemp_act":"306",
+  "L_flowtemp_set":"80",
+  "L_state":"8",
+  "L_statetext":"Betriebsart Aus",
+  "L_pump":"false",
+  "temp_heat":"220",
+  "temp_setback":"180",
+  "name":"Erdgeschoss"
+ },
+ "pu1":{
+  "L_tpo_act":"591",
+  "L_tpm_act":"507",
+  "L_state":"512",
+  "L_statetext":"Anforderung Aus",
+  "L_pump":"0"
+ },
+ "pe1":{
+  "L_temp_act":"680",
+  "L_temp_set":"80",
+  "L_ext_temp":"-32768",
+  "L_br":"false",
+  "L_stb":"true",
+  "L_state":"6",
+  "L_statetext":"Aus",
+  "L_starts":"1558",
+  "L_runtime":"5439",
+  "L_storage_fill":"705",
+  "L_storage_hopper":"29",
+  "L_pellets_today":"2",
+  "mode":"1"
+ },
+ "circ1":{
+  "L_pummp":"false",
+  "L_ret_temp":"310"
+ }
+}

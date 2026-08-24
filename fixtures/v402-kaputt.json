@@ -1,0 +1,13 @@
+{
+ "hk1":{
+  "L_flowtemp_act":{"val":306, "unit":"C", "factor":0.1, "min":-32768, "max":32767, "text":"VL Ist"},
+  "L_state":{"val":8, "factor":1, "text":"Status"},
+  "L_statetext:"Betriebsart Aus",
+  "temp_heat":{"val":220, "unit":"C", "factor":0.1, "min":100, "max":400, "text":"Raumtemp Heizen"}
+ },
+ "pe1":{
+  "L_temp_act":{"val":666, "unit":"C", "factor":0.1, "min":-32768, "max":32767, "text":"Kesseltemperatur"},
+  "L_statetext:"Aus",
+  "mode":{"val":1, "format":"0:Aus|1:Auto|2:Ein", "text":"Betriebsart"}
+ }
+}
