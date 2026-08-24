@@ -135,6 +135,7 @@ class Pellematic extends IPSModule
         $this->RegisterAttributeInteger('RateHits', 0);
         $this->RegisterAttributeString('DayStamp', '');
         $this->RegisterAttributeString('PelletDay', '');
+        $this->RegisterAttributeString('LastWarn', '');
         $this->RegisterAttributeInteger('PlainAllOk', 0);
         $this->RegisterAttributeString('LastFlat', '{}');
 
@@ -183,11 +184,18 @@ class Pellematic extends IPSModule
             $this->enableActions();
         }
 
-        if ($this->ReadPropertyBoolean('WarnForeignPoll')) {
+        // Der Hinweis auf die zweite Abfragestelle gehoert ins Log, aber nicht bei
+        // JEDEM Uebernehmen: im Trockenlauf ist das Nebeneinander gewollt und
+        // harmlos, und wer die Einstellungen ein Dutzend Mal speichert, hat sonst
+        // ein Dutzend Warnungen im Log stehen. Erst ab dem Spiegelbetrieb wird es
+        // eine Aussage - und auch dann nur, wenn sie sich seit dem letzten Mal
+        // geaendert hat.
+        if ($this->ReadPropertyBoolean('WarnForeignPoll') && $this->ReadPropertyInteger('Mode') >= 1) {
             $hinweis = $this->pruefeFremdabfrage();
-            if ($hinweis !== '') {
+            if ($hinweis !== '' && $hinweis !== $this->ReadAttributeString('LastWarn')) {
                 $this->LogMessage($hinweis, KL_WARNING);
             }
+            $this->WriteAttributeString('LastWarn', $hinweis);
         }
     }
 
