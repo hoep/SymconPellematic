@@ -50,6 +50,14 @@ class Pellematic extends IPSModule
     private const EVENT_RUECKSCHREIB = 44436;
 
     /** Der Ordner, in dem die bestehenden Variablen liegen. Nur zur Anzeige. */
+    /**
+     * Die Kategorie, in der die Variablen dieser ANLAGE bereits liegen.
+     *
+     * Sie ist der Vorgabewert fuer den Baum - aber nur hier: eine frische
+     * Installation kennt diese Nummer nicht. Deshalb wird sie nie direkt
+     * benutzt, sondern nur ueber baumWurzel(), die der Reihe nach nachsieht:
+     * eingestellte Kategorie, dann diese, dann eine selbst angelegte.
+     */
     private const ORDNER_ALT = 41584;
 
     /** Betriebsstufen. */
@@ -87,6 +95,8 @@ class Pellematic extends IPSModule
         $this->RegisterPropertyBoolean('CreateMissing', false);
         $this->RegisterPropertyBoolean('ForecastJson', true);
         $this->RegisterPropertyBoolean('AutoSort', true);
+        // Leer = das Modul sucht sich die Stelle selbst (siehe baumWurzel).
+        $this->RegisterPropertyInteger('TreeRoot', 0);
         $this->RegisterPropertyBoolean('CreateLinks', true);    // Kategorie -> eigene Variable
         $this->RegisterPropertyBoolean('MirrorLinks', false);   // Instanz -> alte Variable
         $this->RegisterPropertyBoolean('LogNew', false);
@@ -1556,6 +1566,133 @@ class Pellematic extends IPSModule
      * dem Stilllegen von Ereignis #<ID> zulaessig.
      */
     /**
+     * Wohin gehoeren die Variablen im Baum?
+     *
+     * 1. Was im Formular eingestellt ist (eine frische Installation stellt hier
+     *    ihre Wunschkategorie ein, oder laesst es leer).
+     * 2. Sonst die Kategorie, in der die Variablen dieser Anlage schon liegen -
+     *    das gilt nur fuer die Anlage, auf der das Modul entstanden ist.
+     * 3. Sonst eine selbst angelegte Kategorie "Pellematic" neben der Instanz.
+     *    So funktioniert das Modul auch dort, wo es nichts vorfindet.
+     */
+    private function baumWurzel(bool $anlegen = false): int
+    {
+        $eingestellt = (int) $this->ReadPropertyInteger('TreeRoot');
+        if ($eingestellt > 0 && @\IPS_ObjectExists($eingestellt)) {
+            return $eingestellt;
+        }
+        if (@\IPS_ObjectExists(self::ORDNER_ALT)) {
+            return self::ORDNER_ALT;
+        }
+        $eltern = (int) @\IPS_GetParent($this->InstanceID);
+        foreach (@\IPS_GetChildrenIDs($eltern) ?: [] as $k) {
+            $o = @\IPS_GetObject($k);
+            if (is_array($o) && $o['ObjectType'] === 0 && $o['ObjectName'] === 'Pellematic') {
+                return $k;
+            }
+        }
+        if (!$anlegen) {
+            return 0;
+        }
+        $kid = @\IPS_CreateCategory();
+        if (!is_int($kid) || $kid <= 0) {
+            return 0;
+        }
+        @\IPS_SetName($kid, 'Pellematic');
+        @\IPS_SetParent($kid, $eltern);
+        return $kid;
+    }
+
+    /**
+     * Legt die fehlenden Groessen als FREIE Variablen im Baum an - dort, wo auch
+     * die alten liegen, in der Kategorie ihres Bereichs.
+     *
+     * Der Unterschied zu den eigenen Variablen unter der Instanz ist der
+     * Besitzer. Was ein Modul selbst anlegt, gehoert ihm: es findet seine
+     * Variablen ueber GetIDForIdent, und das sucht ausschliesslich unter den
+     * direkten Kindern. Verschiebt man eine, ist sie fuer das Modul verschwunden
+     * und wird beim naechsten Uebernehmen neu angelegt. Eine freie Variable
+     * dagegen gehoert niemandem - sie laesst sich einsortieren, umbenennen und
+     * verschieben, und das Modul schreibt ueber die Zuordnungsliste hinein,
+     * genau wie in die alten Variablen des Skripts.
+     *
+     * Danach steht alles gleichberechtigt im Baum: kein Unterschied mehr
+     * zwischen "alt" und "neu", nur noch Bereiche.
+     */
+    public function ErzeugeImBaum(bool $ausfuehren = false): string
+    {
+        $flat = json_decode($this->ReadAttributeString('LastFlat'), true);
+        if (!is_array($flat) || $flat === []) {
+            return 'Es liegen noch keine Daten der Anlage vor - bitte zuerst abfragen.';
+        }
+        $wurzel = $this->baumWurzel($ausfuehren);
+        if ($wurzel <= 0) {
+            return 'Es ist keine Kategorie eingestellt, in der die Variablen liegen sollen.';
+        }
+
+        $belegt = [];
+        foreach ($this->mappingRows() as $row) {
+            $k = (string) ($row['Key'] ?? '');
+            if ($k !== '') {
+                $belegt[$k] = true;
+                $belegt[$this->quelleFuer($k)] = true;
+            }
+        }
+
+        $rows = $this->mappingRows();
+        $kategorien = [];
+        $zeilen = [];
+        $angelegt = 0;
+        $ohneVorhersage = $this->ReadPropertyBoolean('ForecastJson');
+
+        foreach ($flat as $key => $e) {
+            if (isset($belegt[$key])) {
+                continue;
+            }
+            if ($ohneVorhersage && str_starts_with((string) $key, 'forecast.')) {
+                continue; // steht als JSON in einer Variablen
+            }
+            $bereich = Gliederung::bereich((string) $key);
+            $name = Keys::label((string) $key, (string) ($e['text'] ?? ''));
+            $zeilen[] = sprintf('  %-30s -> %s / %s', $key, Gliederung::name($bereich), $name);
+            if (!$ausfuehren) {
+                continue;
+            }
+            $kid = $this->kategorie($wurzel, $bereich, $kategorien, true);
+            if ($kid <= 0) {
+                continue;
+            }
+            $typ = Keys::type((string) $key, $e['raw'] ?? null);
+            $vid = @\IPS_CreateVariable($typ);
+            if (!is_int($vid) || $vid <= 0) {
+                continue;
+            }
+            @\IPS_SetName($vid, $name);
+            @\IPS_SetParent($vid, $kid);
+            @\IPS_SetPosition($vid, Gliederung::reihenfolge((string) $key));
+            $profil = Profiles::enumProfile((string) $key, (string) ($e['format'] ?? ''));
+            if ($profil !== '') {
+                @\IPS_SetVariableCustomProfile($vid, $profil);
+            }
+            $rows[] = ['Key' => (string) $key, 'Caption' => $name, 'VarID' => $vid,
+                       'Factor' => 0.0, 'Active' => true];
+            $angelegt++;
+        }
+
+        if ($ausfuehren && $angelegt > 0) {
+            @\IPS_SetProperty($this->InstanceID, 'Mapping', json_encode($rows, JSON_UNESCAPED_UNICODE));
+            @\IPS_ApplyChanges($this->InstanceID);
+        }
+
+        $kopf = $ausfuehren
+            ? sprintf("Angelegt: %d freie Variablen im Baum, Zuordnung ergaenzt.\n"
+                . "Sie gehoeren keiner Instanz und lassen sich frei einsortieren.\n", $angelegt)
+            : sprintf("VORSCHAU - es wurde nichts angelegt. %d Groessen wuerden entstehen.\n"
+                . "Aufruf zum Ausfuehren: OKP_ErzeugeImBaum(%d, true);\n", count($zeilen), $this->InstanceID);
+        return $kopf . implode("\n", array_slice($zeilen, 0, 80));
+    }
+
+    /**
      * Bringt Ordnung in den Baum: je Bereich eine Kategorie, jede Variable
      * hinein, alles in einer sinnvollen Reihenfolge.
      *
@@ -1569,9 +1706,9 @@ class Pellematic extends IPSModule
      */
     public function Ordne(bool $ausfuehren = false): string
     {
-        $wurzel = self::ORDNER_ALT;
-        if (!@\IPS_ObjectExists($wurzel)) {
-            return 'Die Altkategorie #' . $wurzel . ' gibt es nicht.';
+        $wurzel = $this->baumWurzel($ausfuehren);
+        if ($wurzel <= 0) {
+            return 'Es ist keine Kategorie eingestellt, in der die Variablen liegen sollen.';
         }
 
         $zeilen = [];
@@ -1762,9 +1899,9 @@ class Pellematic extends IPSModule
             // aus ihr herausgerissen: das fremde Modul legt sie neu an, und die
             // verschobene Kopie wird zur Waise, deren Logging weiterlaeuft, ohne
             // je wieder gefuellt zu werden.
-            if (!$this->liegtUnter($vid, self::ORDNER_ALT)) {
+            if (!$this->liegtUnter($vid, $this->baumWurzel())) {
                 $zeilen[] = sprintf('  #%-6d %-32s ABGELEHNT: liegt nicht unter #%d',
-                    $vid, @IPS_GetName($vid), self::ORDNER_ALT);
+                    $vid, @IPS_GetName($vid), $this->baumWurzel());
                 continue;
             }
             $anzahl++;
@@ -2091,8 +2228,14 @@ class Pellematic extends IPSModule
                         'caption' => 'Zusätzlich Verknüpfungen unter der Instanz auf die alten Variablen (selten nötig)'],
                     ['type' => 'CheckBox', 'name' => 'ForecastJson',
                         'caption' => 'Wettervorhersage als ein JSON (Format des Wetter-Widgets) statt als 25 Einzelvariablen'],
+                    ['type' => 'SelectCategory', 'name' => 'TreeRoot',
+                        'caption' => 'Kategorie für die Variablen (leer = vorhandene Ablage bzw. eigene anlegen)'],
                     ['type' => 'CheckBox', 'name' => 'AutoSort',
                         'caption' => 'Variablen nach Bereichen gliedern (Kessel, Puffer, Warmwasser, Heizkreise, Wetter, Anlage, Statistik)'],
+                    ['type' => 'Button', 'caption' => 'Fehlende Größen als freie Variablen im Baum anlegen (Vorschau)',
+                        'onClick' => 'echo OKP_ErzeugeImBaum($id, false);'],
+                    ['type' => 'Button', 'caption' => 'Fehlende Größen jetzt anlegen',
+                        'onClick' => 'echo OKP_ErzeugeImBaum($id, true);'],
                     ['type' => 'Button', 'caption' => 'Gliederung anzeigen (Vorschau)',
                         'onClick' => 'echo OKP_Ordne($id, false);'],
                     ['type' => 'Button', 'caption' => 'Jetzt gliedern',

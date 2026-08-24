@@ -197,3 +197,30 @@ im Quelltext gar nicht erst vorkommen.
 ## Lizenz
 
 MIT, siehe `LICENSE`.
+
+## Erste Einrichtung (frische Anlage, nichts vorhanden)
+
+Wer das Modul neu installiert, findet keine Zuordnung und keine Variablen vor.
+Der Weg ist trotzdem kurz:
+
+1. **Instanz anlegen**, Adresse und Port der Anlage eintragen und das Passwort -
+   es ist bei dieser Schnittstelle ein Stück des URL-Pfads, kein Kennwortfeld im
+   üblichen Sinn (`http://<adresse>:4321/<passwort>/all?`).
+2. **Kategorie wählen** (Feld „Kategorie für die Variablen"). Bleibt es leer,
+   sucht sich das Modul die Stelle selbst: eine vorhandene Ablage, sonst legt es
+   neben der Instanz eine Kategorie „Pellematic" an.
+3. **Abfragen** — der Knopf „Jetzt abfragen" holt einmal alles und legt die
+   Metadaten der Anlage ab (Faktoren, Grenzen, Aufzählungen kommen von dort,
+   nicht aus dem Code).
+4. **„Fehlende Größen als freie Variablen im Baum anlegen"** — daraus entsteht
+   die vollständige Gliederung: Kessel und Brenner, Pufferspeicher, Warmwasser,
+   Heizkreise, Wetter, Anlage, Verbrauch und Statistik. Die Variablen gehören
+   keiner Instanz; sie lassen sich verschieben, umbenennen und archivieren wie
+   jede von Hand angelegte.
+5. **Betriebsstufe** auf Spiegelbetrieb stellen. Schreiben an die Anlage bleibt
+   gesperrt, bis es ausdrücklich freigegeben wird.
+
+Wer von einem bestehenden Abfrageskript kommt, geht denselben Weg, ergänzt aber
+vor Schritt 4 die **Zuordnung** („Zuordnung vorbelegen"): dort werden die
+vorhandenen Variablen samt ihrer Historie eingetragen, und nur was dann noch
+fehlt, wird neu angelegt.
