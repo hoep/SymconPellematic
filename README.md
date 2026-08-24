@@ -206,9 +206,14 @@ Der Weg ist trotzdem kurz:
 1. **Instanz anlegen**, Adresse und Port der Anlage eintragen und das Passwort -
    es ist bei dieser Schnittstelle ein Stück des URL-Pfads, kein Kennwortfeld im
    üblichen Sinn (`http://<adresse>:4321/<passwort>/all?`).
-2. **Kategorie wählen** (Feld „Kategorie für die Variablen"). Bleibt es leer,
-   sucht sich das Modul die Stelle selbst: eine vorhandene Ablage, sonst legt es
-   neben der Instanz eine Kategorie „Pellematic" an.
+2. **Kategorie wählen** (Feld „Kategorie für die Variablen"). Bleibt es leer -
+   der Normalfall -, legt das Modul seine Kategorien **unterhalb der Instanz**
+   an: ein Knoten aufgeklappt, und die ganze Heizung liegt vor einem. Wer die
+   Variablen lieber woanders hat, trägt hier eine Kategorie ein.
+
+   Der Preis der Ordnung unter der Instanz: wer die Instanz löscht, löscht den
+   ganzen Ast mit - auch Variablen mit langer Historie. Genau dafür gibt es das
+   Feld.
 3. **Abfragen** — der Knopf „Jetzt abfragen" holt einmal alles und legt die
    Metadaten der Anlage ab (Faktoren, Grenzen, Aufzählungen kommen von dort,
    nicht aus dem Code).

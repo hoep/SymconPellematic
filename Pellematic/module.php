@@ -97,6 +97,9 @@ class Pellematic extends IPSModule
         $this->RegisterPropertyBoolean('AutoSort', true);
         // Leer = das Modul sucht sich die Stelle selbst (siehe baumWurzel).
         $this->RegisterPropertyInteger('TreeRoot', 0);
+        // Fehlende Groessen von selbst anlegen - sonst muesste man nach jeder
+        // Einrichtung erst einen Knopf finden, damit ueberhaupt etwas dasteht.
+        $this->RegisterPropertyBoolean('AutoCreate', true);
         $this->RegisterPropertyBoolean('CreateLinks', true);    // Kategorie -> eigene Variable
         $this->RegisterPropertyBoolean('MirrorLinks', false);   // Instanz -> alte Variable
         $this->RegisterPropertyBoolean('LogNew', false);
@@ -310,6 +313,20 @@ class Pellematic extends IPSModule
         // --- Abgeleitete Groessen -------------------------------------------
         if ($this->ReadPropertyBoolean('Derived')) {
             $this->rechneAbgeleitet($flat, $meta);
+        }
+
+        // --- Fehlt etwas im Baum? Dann anlegen, ohne dass jemand einen Knopf sucht.
+        //
+        // Das laeuft nur, wenn wirklich neue Schluessel dazugekommen sind: beim
+        // ersten Lauf einer frischen Einrichtung, oder wenn die Anlage nach einem
+        // Firmwarewechsel etwas Neues meldet. ErzeugeImBaum uebernimmt selbst
+        // (IPS_ApplyChanges), deshalb endet die Runde hier - die Werte schreibt
+        // der naechste Takt, eine Minute spaeter.
+        if ($this->ReadPropertyBoolean('AutoCreate') && $this->fehlendeSchluessel($flat) !== []) {
+            $anzahl = count($this->fehlendeSchluessel($flat));
+            $this->debug('Baum', $anzahl . ' neue Groessen - werden im Baum angelegt.');
+            $this->ErzeugeImBaum(true);
+            return;
         }
 
         if ($this->ReadPropertyBoolean('ForecastJson')) {
@@ -1566,6 +1583,36 @@ class Pellematic extends IPSModule
      * dem Stilllegen von Ereignis #<ID> zulaessig.
      */
     /**
+     * Welche Schluessel der Anlage haben noch keine Variable? Die Vorhersage
+     * zaehlt nicht mit, solange sie als JSON gefuehrt wird.
+     *
+     * @return list<string>
+     */
+    private function fehlendeSchluessel(array $flat): array
+    {
+        $belegt = [];
+        foreach ($this->mappingRows() as $row) {
+            $k = (string) ($row['Key'] ?? '');
+            if ($k !== '') {
+                $belegt[$k] = true;
+                $belegt[$this->quelleFuer($k)] = true;
+            }
+        }
+        $ohneVorhersage = $this->ReadPropertyBoolean('ForecastJson');
+        $offen = [];
+        foreach (array_keys($flat) as $key) {
+            if (isset($belegt[$key])) {
+                continue;
+            }
+            if ($ohneVorhersage && str_starts_with((string) $key, 'forecast.')) {
+                continue;
+            }
+            $offen[] = (string) $key;
+        }
+        return $offen;
+    }
+
+    /**
      * Wohin gehoeren die Variablen im Baum?
      *
      * 1. Was im Formular eingestellt ist (eine frische Installation stellt hier
@@ -1581,26 +1628,14 @@ class Pellematic extends IPSModule
         if ($eingestellt > 0 && @\IPS_ObjectExists($eingestellt)) {
             return $eingestellt;
         }
-        if (@\IPS_ObjectExists(self::ORDNER_ALT)) {
-            return self::ORDNER_ALT;
-        }
-        $eltern = (int) @\IPS_GetParent($this->InstanceID);
-        foreach (@\IPS_GetChildrenIDs($eltern) ?: [] as $k) {
-            $o = @\IPS_GetObject($k);
-            if (is_array($o) && $o['ObjectType'] === 0 && $o['ObjectName'] === 'Pellematic') {
-                return $k;
-            }
-        }
-        if (!$anlegen) {
-            return 0;
-        }
-        $kid = @\IPS_CreateCategory();
-        if (!is_int($kid) || $kid <= 0) {
-            return 0;
-        }
-        @\IPS_SetName($kid, 'Pellematic');
-        @\IPS_SetParent($kid, $eltern);
-        return $kid;
+        // Ohne eigene Angabe: die Instanz selbst. Alles, was zur Anlage gehoert,
+        // haengt dann unter ihr - man klappt einen Knoten auf und hat die Heizung
+        // vollstaendig vor sich, statt sie an zwei Stellen zu suchen.
+        //
+        // Preis dieser Ordnung: wer die Instanz loescht, loescht den ganzen Ast
+        // mit - auch die alten Variablen samt ihrer Historie. Wer das nicht will,
+        // traegt oben eine eigene Kategorie ein.
+        return $this->InstanceID;
     }
 
     /**
@@ -1724,8 +1759,11 @@ class Pellematic extends IPSModule
             if ($key === '' || $vid <= 0 || !@\IPS_VariableExists($vid)) {
                 continue;
             }
-            if (!$this->liegtUnter($vid, $wurzel)) {
-                continue; // fremde Variablen bleiben, wo sie sind
+            // Angefasst wird, was unter der Zielwurzel liegt - oder noch an der
+            // alten Stelle steht und deshalb gerade umzieht.
+            if (!$this->liegtUnter($vid, $wurzel)
+                && !(@\IPS_ObjectExists(self::ORDNER_ALT) && $this->liegtUnter($vid, self::ORDNER_ALT))) {
+                continue;
             }
             $bereich = Gliederung::bereich($key);
             $kid = $this->kategorie($wurzel, $bereich, $kategorien, $ausfuehren);
@@ -1860,6 +1898,21 @@ class Pellematic extends IPSModule
                 return $merker[$bereich] = $k;
             }
         }
+        // Steht die Kategorie noch an der alten Stelle, wird sie MITSAMT Inhalt
+        // umgehaengt - sonst entstuenden zwei gleichnamige und die Variablen
+        // waeren auf beide verteilt.
+        if (@\IPS_ObjectExists(self::ORDNER_ALT) && self::ORDNER_ALT !== $wurzel) {
+            foreach (@\IPS_GetChildrenIDs(self::ORDNER_ALT) ?: [] as $k) {
+                $o = @\IPS_GetObject($k);
+                if (is_array($o) && $o['ObjectType'] === 0 && $o['ObjectName'] === $name) {
+                    if ($anlegen) {
+                        @\IPS_SetParent($k, $wurzel);
+                        @\IPS_SetPosition($k, Gliederung::position($bereich));
+                    }
+                    return $merker[$bereich] = $k;
+                }
+            }
+        }
         if (!$anlegen) {
             return $merker[$bereich] = 0;
         }
@@ -1899,7 +1952,8 @@ class Pellematic extends IPSModule
             // aus ihr herausgerissen: das fremde Modul legt sie neu an, und die
             // verschobene Kopie wird zur Waise, deren Logging weiterlaeuft, ohne
             // je wieder gefuellt zu werden.
-            if (!$this->liegtUnter($vid, $this->baumWurzel())) {
+            if (!$this->liegtUnter($vid, $this->baumWurzel())
+                && !$this->liegtUnter($vid, self::ORDNER_ALT)) {
                 $zeilen[] = sprintf('  #%-6d %-32s ABGELEHNT: liegt nicht unter #%d',
                     $vid, @IPS_GetName($vid), $this->baumWurzel());
                 continue;
@@ -2229,9 +2283,11 @@ class Pellematic extends IPSModule
                     ['type' => 'CheckBox', 'name' => 'ForecastJson',
                         'caption' => 'Wettervorhersage als ein JSON (Format des Wetter-Widgets) statt als 25 Einzelvariablen'],
                     ['type' => 'SelectCategory', 'name' => 'TreeRoot',
-                        'caption' => 'Kategorie für die Variablen (leer = vorhandene Ablage bzw. eigene anlegen)'],
+                        'caption' => 'Kategorie für die Variablen (leer = unterhalb dieser Instanz)'],
                     ['type' => 'CheckBox', 'name' => 'AutoSort',
                         'caption' => 'Variablen nach Bereichen gliedern (Kessel, Puffer, Warmwasser, Heizkreise, Wetter, Anlage, Statistik)'],
+                    ['type' => 'CheckBox', 'name' => 'AutoCreate',
+                        'caption' => 'Fehlende Größen selbständig im Baum anlegen (beim ersten Abruf und nach Firmwarewechseln)'],
                     ['type' => 'Button', 'caption' => 'Fehlende Größen als freie Variablen im Baum anlegen (Vorschau)',
                         'onClick' => 'echo OKP_ErzeugeImBaum($id, false);'],
                     ['type' => 'Button', 'caption' => 'Fehlende Größen jetzt anlegen',
