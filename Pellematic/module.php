@@ -28,6 +28,7 @@ require_once __DIR__ . '/../libs/Pellematic/autoload.php';
 
 use Hoep\Pellematic\Client;
 use Hoep\Pellematic\Derived;
+use Hoep\Pellematic\Forecast;
 use Hoep\Pellematic\Keys;
 use Hoep\Pellematic\Mapping;
 use Hoep\Pellematic\Meta;
@@ -83,6 +84,7 @@ class Pellematic extends IPSModule
         $this->RegisterPropertyBoolean('UseExisting', true);
         $this->RegisterPropertyString('Mapping', '[]');
         $this->RegisterPropertyBoolean('CreateMissing', false);
+        $this->RegisterPropertyBoolean('ForecastJson', true);
         $this->RegisterPropertyBoolean('CreateLinks', true);
         $this->RegisterPropertyBoolean('LogNew', false);
         $this->RegisterPropertyInteger('ArchiveID', 0);
@@ -149,6 +151,10 @@ class Pellematic extends IPSModule
         $this->RegisterVariableString('DeviceType', 'Anlagentyp', '', 60);
         $this->RegisterVariableString('ErrorText', 'Aktive Störungen', '', 70);
         $this->RegisterVariableString('LastWrite', 'Letzte Schreibaktion', '', 80);
+        // Die Vorhersage als EIN JSON statt als 25 Textvariablen - im Format, das
+        // das Wetter-Widget des LiveViewBuilders liest (OpenWeatherMap One-Call).
+        // Die Anlage bezieht ihre Vorhersage ohnehin von dort.
+        $this->RegisterVariableString('Forecast', 'Wettervorhersage (JSON)', '', 90);
 
         $this->RegisterTimer('Poll', 0, 'OKP_Poll($_IPS[\'TARGET\']);');
     }
@@ -281,6 +287,13 @@ class Pellematic extends IPSModule
         // --- Abgeleitete Groessen -------------------------------------------
         if ($this->ReadPropertyBoolean('Derived')) {
             $this->rechneAbgeleitet($flat, $meta);
+        }
+
+        if ($this->ReadPropertyBoolean('ForecastJson')) {
+            $vh = Forecast::owm($flat);
+            if ($vh !== []) {
+                $this->setzeEigene('Forecast', (string) json_encode($vh, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+            }
         }
 
         // --- Rueckkehr aus dem Rueckzug -------------------------------------
@@ -1247,9 +1260,19 @@ class Pellematic extends IPSModule
      * die Konfiguration nicht selbst - der Vorschlag wird ins Formular
      * geschrieben, uebernommen wird er vom Nutzer.
      */
-    public function FillMapping(): string
+    public function FillMapping(bool $Speichern = false): string
     {
         $v = Mapping::vorschlag($this->mappingRows());
+        if ($Speichern) {
+            // Ohne offenes Formular greift UpdateFormField ins Leere - dann muss
+            // die Liste direkt in die Eigenschaft. Genau daran ist die
+            // Einrichtung am 24.08.2026 gescheitert: der Knopf meldete
+            // "77 Zeilen vorgeschlagen", gespeichert war danach nichts, und das
+            // Modul legte mangels Zuordnung eigene Variablen an.
+            @\IPS_SetProperty($this->InstanceID, 'Mapping', json_encode($v['rows'], JSON_UNESCAPED_UNICODE));
+            @\IPS_ApplyChanges($this->InstanceID);
+            return $v['bericht'] . "\n\nDie Liste wurde direkt gespeichert (" . count($v['rows']) . ' Zeilen).';
+        }
         $this->UpdateFormField('Mapping', 'values', json_encode($v['rows'], JSON_UNESCAPED_UNICODE));
         return $v['bericht'] . "\n\nDie Liste steht jetzt im Formular. Sie wird erst mit "
             . '"Übernehmen" gespeichert.';

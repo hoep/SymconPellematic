@@ -33,6 +33,7 @@ foreach ([
     'Keys.php',
     'Meta.php',
     'Parser.php',
+    'Forecast.php',
     'Client.php',
     'Profiles.php',
     'StateBits.php',
