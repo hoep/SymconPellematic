@@ -29,6 +29,7 @@ require_once __DIR__ . '/../libs/Pellematic/autoload.php';
 use Hoep\Pellematic\Client;
 use Hoep\Pellematic\Derived;
 use Hoep\Pellematic\Forecast;
+use Hoep\Pellematic\Gliederung;
 use Hoep\Pellematic\Keys;
 use Hoep\Pellematic\Mapping;
 use Hoep\Pellematic\Meta;
@@ -85,6 +86,7 @@ class Pellematic extends IPSModule
         $this->RegisterPropertyString('Mapping', '[]');
         $this->RegisterPropertyBoolean('CreateMissing', false);
         $this->RegisterPropertyBoolean('ForecastJson', true);
+        $this->RegisterPropertyBoolean('AutoSort', true);
         $this->RegisterPropertyBoolean('CreateLinks', true);
         $this->RegisterPropertyBoolean('LogNew', false);
         $this->RegisterPropertyInteger('ArchiveID', 0);
@@ -189,6 +191,13 @@ class Pellematic extends IPSModule
 
         if ($this->ReadPropertyBoolean('ActionOnVars')) {
             $this->enableActions();
+        }
+
+        // Ordnung ist Standardverhalten, kein Sonderwunsch: 86 Variablen in einer
+        // Kategorie sind eine Liste, keine Gliederung. Wer es anders will,
+        // schaltet es ab - dann bleibt der Baum, wie er ist.
+        if ($this->ReadPropertyBoolean('AutoSort')) {
+            $this->Ordne(true);
         }
 
         // Der Hinweis auf die zweite Abfragestelle gehoert ins Log, aber nicht bei
@@ -967,10 +976,18 @@ class Pellematic extends IPSModule
             }
         }
 
+        // Steht die Vorhersage als JSON in einer Variablen, braucht sie keine 25
+        // Einzelvariablen daneben - das waere genau die Zettelwirtschaft, die das
+        // JSON abloest.
+        $ohneVorhersage = $this->ReadPropertyBoolean('ForecastJson');
+
         $pos = 100;
         foreach ($flat as $key => $e) {
             $pos++;
             if (isset($zugeordnet[$key])) {
+                continue;
+            }
+            if ($ohneVorhersage && str_starts_with($key, 'forecast.')) {
                 continue;
             }
             $ident = Keys::ident($key);
@@ -1522,6 +1539,111 @@ class Pellematic extends IPSModule
      * ersten verschobenen Objekt still aus. Das ist beabsichtigt, aber erst nach
      * dem Stilllegen von Ereignis #<ID> zulaessig.
      */
+    /**
+     * Bringt Ordnung in den Baum: je Bereich eine Kategorie, jede Variable
+     * hinein, alles in einer sinnvollen Reihenfolge.
+     *
+     * Die BESTEHENDEN Variablen wandern unter die Altkategorie in Unterordner -
+     * ihre Objekt-ID und damit ihr Archiv bleiben unberuehrt, verschoben wird
+     * nur der Platz im Baum. Die EIGENEN Variablen der Instanz koennen nicht
+     * wandern (ein Modul findet seine Variablen nur als direkte Kinder), sie
+     * bekommen stattdessen Positionen, die sie nach Bereichen gruppieren.
+     *
+     * Ohne Argument ist es eine Vorschau, die nichts veraendert.
+     */
+    public function Ordne(bool $ausfuehren = false): string
+    {
+        $wurzel = self::ORDNER_ALT;
+        if (!@\IPS_ObjectExists($wurzel)) {
+            return 'Die Altkategorie #' . $wurzel . ' gibt es nicht.';
+        }
+
+        $zeilen = [];
+        $kategorien = [];
+        $verschoben = 0;
+        $gesetzt = 0;
+
+        // 1) Bestehende Variablen aus der Zuordnung
+        foreach ($this->mappingRows() as $row) {
+            $key = (string) ($row['Key'] ?? '');
+            $vid = (int) ($row['VarID'] ?? 0);
+            if ($key === '' || $vid <= 0 || !@\IPS_VariableExists($vid)) {
+                continue;
+            }
+            if (!$this->liegtUnter($vid, $wurzel)) {
+                continue; // fremde Variablen bleiben, wo sie sind
+            }
+            $bereich = Gliederung::bereich($key);
+            $kid = $this->kategorie($wurzel, $bereich, $kategorien, $ausfuehren);
+            $pos = Gliederung::reihenfolge($key);
+            $alt = @\IPS_GetParent($vid);
+            if ($kid > 0 && $alt !== $kid) {
+                $zeilen[] = sprintf('  #%-6d %-34s -> %s', $vid, @\IPS_GetName($vid), Gliederung::name($bereich));
+                if ($ausfuehren) {
+                    @\IPS_SetParent($vid, $kid);
+                    @\IPS_SetPosition($vid, $pos);
+                    $verschoben++;
+                }
+            } elseif ($ausfuehren && $kid > 0) {
+                @\IPS_SetPosition($vid, $pos);
+            }
+        }
+
+        // 2) Eigene Variablen: Position nach Bereich, damit sie gruppiert stehen
+        foreach (\IPS_GetChildrenIDs($this->InstanceID) as $k) {
+            $o = @\IPS_GetObject($k);
+            if (!is_array($o) || $o['ObjectType'] !== 2) {
+                continue;
+            }
+            $ident = (string) $o['ObjectIdent'];
+            if ($ident === '') {
+                continue;
+            }
+            $key = str_replace('_', '.', $ident);
+            $bereich = in_array($ident, ['LastRead', 'Online', 'Error', 'Duration', 'RateHits',
+                'DeviceType', 'ErrorText', 'LastWrite', 'Forecast'], true)
+                ? 'diag' : Gliederung::bereich($key);
+            $pos = Gliederung::position($bereich) * 100 + Gliederung::reihenfolge($key) / 10;
+            if ($ausfuehren) {
+                @\IPS_SetPosition($k, (int) $pos);
+                $gesetzt++;
+            }
+        }
+
+        $kopf = $ausfuehren
+            ? sprintf("Geordnet: %d Variablen in Kategorien verschoben, %d eigene sortiert.\n"
+                . "Objekt-IDs und Archiv sind unveraendert - verschoben wurde nur der Platz im Baum.\n", $verschoben, $gesetzt)
+            : sprintf("VORSCHAU - es wurde nichts veraendert. %d Variablen wuerden einsortiert.\n"
+                . "Aufruf zum Ausfuehren: OKP_Ordne(%d, true);\n", count($zeilen), $this->InstanceID);
+        return $kopf . implode("\n", array_slice($zeilen, 0, 80));
+    }
+
+    /** Kategorie eines Bereichs unter der Wurzel - wird bei Bedarf angelegt. */
+    private function kategorie(int $wurzel, string $bereich, array &$merker, bool $anlegen): int
+    {
+        if (isset($merker[$bereich])) {
+            return $merker[$bereich];
+        }
+        $name = Gliederung::name($bereich);
+        foreach (\IPS_GetChildrenIDs($wurzel) as $k) {
+            $o = @\IPS_GetObject($k);
+            if (is_array($o) && $o['ObjectType'] === 0 && $o['ObjectName'] === $name) {
+                return $merker[$bereich] = $k;
+            }
+        }
+        if (!$anlegen) {
+            return $merker[$bereich] = 0;
+        }
+        $kid = @\IPS_CreateCategory();
+        if (!is_int($kid) || $kid <= 0) {
+            return $merker[$bereich] = 0;
+        }
+        @\IPS_SetName($kid, $name);
+        @\IPS_SetParent($kid, $wurzel);
+        @\IPS_SetPosition($kid, Gliederung::position($bereich));
+        return $merker[$bereich] = $kid;
+    }
+
     public function Adopt(bool $ausfuehren = false): string
     {
         $fremd = $this->pruefeFremdabfrage();
@@ -1873,6 +1995,14 @@ class Pellematic extends IPSModule
                         'caption' => 'Nicht zugeordnete Größen zusätzlich unter der Instanz anlegen'],
                     ['type' => 'CheckBox', 'name' => 'CreateLinks',
                         'caption' => 'Verknüpfungen auf die zugeordneten Variablen anlegen'],
+                    ['type' => 'CheckBox', 'name' => 'ForecastJson',
+                        'caption' => 'Wettervorhersage als ein JSON (Format des Wetter-Widgets) statt als 25 Einzelvariablen'],
+                    ['type' => 'CheckBox', 'name' => 'AutoSort',
+                        'caption' => 'Variablen nach Bereichen gliedern (Kessel, Puffer, Warmwasser, Heizkreise, Wetter, Anlage, Statistik)'],
+                    ['type' => 'Button', 'caption' => 'Gliederung anzeigen (Vorschau)',
+                        'onClick' => 'echo OKP_Ordne($id, false);'],
+                    ['type' => 'Button', 'caption' => 'Jetzt gliedern',
+                        'onClick' => 'echo OKP_Ordne($id, true);'],
                     ['type' => 'CheckBox', 'name' => 'LogNew', 'caption' => 'Neu angelegte Variablen archivieren'],
                     ['type' => 'SelectInstance', 'name' => 'ArchiveID', 'caption' => 'Archiv (0 = automatisch suchen)'],
                 ],

@@ -34,6 +34,7 @@ foreach ([
     'Meta.php',
     'Parser.php',
     'Forecast.php',
+    'Gliederung.php',
     'Client.php',
     'Profiles.php',
     'StateBits.php',
