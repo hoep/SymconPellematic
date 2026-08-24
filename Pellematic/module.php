@@ -1585,8 +1585,19 @@ class Pellematic extends IPSModule
             return 'Nicht geschrieben: es liegen keine Metadaten der Anlage vor.';
         }
 
-        $flat = json_decode($this->ReadAttributeString('LastFlat'), true);
-        $gelesen = is_array($flat) ? Parser::value($flat, $key) : null;
+        // Den Ist-Zustand FRISCH holen, nicht aus dem Zwischenspeicher.
+        //
+        // Am 24.08.2026 hat genau das eine Wiederherstellung verschluckt: der
+        // Schreibversuch setzte hk1.temp_vacation auf 15,5, der Ruecksetzer auf
+        // 15,0 wurde aber mit "steht schon an der Anlage" abgelehnt - weil der
+        // Zwischenspeicher noch den Stand VOR dem Schreiben trug. An der Anlage
+        // blieben 15,5 stehen, und niemand haette es gemerkt. Ein Einzelwert
+        // kostet einen Bruchteil einer Sekunde; die Taktbremse gilt ohnehin.
+        // KEIN Rueckfall auf den Zwischenspeicher: laesst sich der Ist-Zustand nicht
+        // frisch lesen, ist er unbekannt - und unbekannt heisst schreiben, nicht
+        // "steht schon so". Ein zweites Mal denselben Wert zu senden schadet nicht,
+        // ein verschluckter Ruecksetzer schon.
+        $gelesen = $this->leseEinzelwert($this->client(), $key, $meta);
 
         $p = WriteGuard::check($key, $wert, $this->freigaben(), $meta, $this->grenzen(), [
             'gelesen' => is_numeric($gelesen) ? (float) $gelesen : null,
