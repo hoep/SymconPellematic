@@ -1562,6 +1562,7 @@ class Pellematic extends IPSModule
         $kategorien = [];
         $verschoben = 0;
         $gesetzt = 0;
+        $verknuepft = 0;
 
         // 1) Bestehende Variablen aus der Zuordnung
         foreach ($this->mappingRows() as $row) {
@@ -1589,7 +1590,18 @@ class Pellematic extends IPSModule
             }
         }
 
-        // 2) Eigene Variablen: Position nach Bereich, damit sie gruppiert stehen
+        // 2) Eigene Variablen: Position nach Bereich - und je eine Verknuepfung in
+        //    der passenden Kategorie.
+        //
+        //    Verschieben geht hier nicht: ein Modul findet seine Variablen nur als
+        //    direkte Kinder wieder, eine verschobene wuerde beim naechsten
+        //    Uebernehmen neu angelegt. Eine Verknuepfung leistet fuer den, der den
+        //    Baum durchsieht, dasselbe - sie zeigt Namen und Wert an ihrem
+        //    fachlichen Platz, waehrend die Variable dort bleibt, wo das Modul sie
+        //    braucht.
+        $DIAG = ['LastRead', 'Online', 'Error', 'Duration', 'RateHits',
+                 'DeviceType', 'ErrorText', 'LastWrite', 'Forecast'];
+        $wollen = [];
         foreach (\IPS_GetChildrenIDs($this->InstanceID) as $k) {
             $o = @\IPS_GetObject($k);
             if (!is_array($o) || $o['ObjectType'] !== 2) {
@@ -1600,22 +1612,86 @@ class Pellematic extends IPSModule
                 continue;
             }
             $key = str_replace('_', '.', $ident);
-            $bereich = in_array($ident, ['LastRead', 'Online', 'Error', 'Duration', 'RateHits',
-                'DeviceType', 'ErrorText', 'LastWrite', 'Forecast'], true)
-                ? 'diag' : Gliederung::bereich($key);
-            $pos = Gliederung::position($bereich) * 100 + Gliederung::reihenfolge($key) / 10;
+            $bereich = in_array($ident, $DIAG, true) ? 'diag' : Gliederung::bereich($key);
+            $pos = Gliederung::position($bereich) * 100 + (int) (Gliederung::reihenfolge($key) / 10);
             if ($ausfuehren) {
-                @\IPS_SetPosition($k, (int) $pos);
+                @\IPS_SetPosition($k, $pos);
                 $gesetzt++;
+            }
+            if (!$this->ReadPropertyBoolean('CreateLinks')) {
+                continue;
+            }
+            $kid = $this->kategorie($wurzel, $bereich, $kategorien, $ausfuehren);
+            if ($kid <= 0) {
+                continue;
+            }
+            $wollen['okp_' . $ident] = true;
+            if (!$ausfuehren) {
+                continue;
+            }
+            $lid = $this->verknuepfung($kid, 'okp_' . $ident, $k, (string) $o['ObjectName'], $pos);
+            if ($lid > 0) {
+                $verknuepft++;
+            }
+        }
+
+        // Verwaiste eigene Verknuepfungen wieder wegraeumen - aber NUR die eigenen.
+        if ($ausfuehren) {
+            foreach ($kategorien as $kid) {
+                if ($kid <= 0) {
+                    continue;
+                }
+                foreach (\IPS_GetChildrenIDs($kid) as $k) {
+                    $o = @\IPS_GetObject($k);
+                    if (!is_array($o) || $o['ObjectType'] !== 6) {
+                        continue;
+                    }
+                    $id = (string) $o['ObjectIdent'];
+                    if (str_starts_with($id, 'okp_') && !isset($wollen[$id])) {
+                        @\IPS_DeleteLink($k);
+                    }
+                }
             }
         }
 
         $kopf = $ausfuehren
-            ? sprintf("Geordnet: %d Variablen in Kategorien verschoben, %d eigene sortiert.\n"
-                . "Objekt-IDs und Archiv sind unveraendert - verschoben wurde nur der Platz im Baum.\n", $verschoben, $gesetzt)
+            ? sprintf("Geordnet: %d Variablen in Kategorien verschoben, %d eigene sortiert, "
+                . "%d Verknuepfungen gepflegt.\n"
+                . "Objekt-IDs und Archiv sind unveraendert - verschoben wurde nur der Platz im Baum.\n",
+                $verschoben, $gesetzt, $verknuepft)
             : sprintf("VORSCHAU - es wurde nichts veraendert. %d Variablen wuerden einsortiert.\n"
                 . "Aufruf zum Ausfuehren: OKP_Ordne(%d, true);\n", count($zeilen), $this->InstanceID);
         return $kopf . implode("\n", array_slice($zeilen, 0, 80));
+    }
+
+    /**
+     * Eine Verknuepfung in der Kategorie, die auf die eigene Variable zeigt.
+     * Vorhandene werden nur nachgezogen, nicht neu angelegt - sonst haette der
+     * Baum nach jedem Uebernehmen doppelte Eintraege.
+     */
+    private function verknuepfung(int $kategorie, string $ident, int $ziel, string $name, int $pos): int
+    {
+        foreach (\IPS_GetChildrenIDs($kategorie) as $k) {
+            $o = @\IPS_GetObject($k);
+            if (is_array($o) && $o['ObjectType'] === 6 && (string) $o['ObjectIdent'] === $ident) {
+                @\IPS_SetLinkTargetID($k, $ziel);
+                if ($o['ObjectName'] !== $name) {
+                    @\IPS_SetName($k, $name);
+                }
+                @\IPS_SetPosition($k, $pos);
+                return $k;
+            }
+        }
+        $lid = @\IPS_CreateLink();
+        if (!is_int($lid) || $lid <= 0) {
+            return 0;
+        }
+        @\IPS_SetIdent($lid, $ident);
+        @\IPS_SetName($lid, $name);
+        @\IPS_SetParent($lid, $kategorie);
+        @\IPS_SetLinkTargetID($lid, $ziel);
+        @\IPS_SetPosition($lid, $pos);
+        return $lid;
     }
 
     /** Kategorie eines Bereichs unter der Wurzel - wird bei Bedarf angelegt. */
