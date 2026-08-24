@@ -87,7 +87,8 @@ class Pellematic extends IPSModule
         $this->RegisterPropertyBoolean('CreateMissing', false);
         $this->RegisterPropertyBoolean('ForecastJson', true);
         $this->RegisterPropertyBoolean('AutoSort', true);
-        $this->RegisterPropertyBoolean('CreateLinks', true);
+        $this->RegisterPropertyBoolean('CreateLinks', true);    // Kategorie -> eigene Variable
+        $this->RegisterPropertyBoolean('MirrorLinks', false);   // Instanz -> alte Variable
         $this->RegisterPropertyBoolean('LogNew', false);
         $this->RegisterPropertyInteger('ArchiveID', 0);
 
@@ -185,9 +186,12 @@ class Pellematic extends IPSModule
         $iv = max(0, $this->ReadPropertyInteger('Interval'));
         $this->SetTimerInterval('Poll', $iv * 1000);
 
-        if ($this->ReadPropertyBoolean('CreateLinks')) {
-            $this->syncLinks();
-        }
+        // Zwei verschiedene Sorten Verknuepfung, frueher an EINEM Schalter:
+        // die hier zeigen von der Instanz auf die alten Variablen (Durchblick im
+        // Modul), die anderen von den Kategorien auf die eigenen Variablen
+        // (Ordnung im Baum). Seit die Kategorien stehen, sind die ersten
+        // Doppelungen - deshalb ein eigener Schalter, Vorgabe aus.
+        $this->syncLinks($this->ReadPropertyBoolean('MirrorLinks'));
 
         if ($this->ReadPropertyBoolean('ActionOnVars')) {
             $this->enableActions();
@@ -1064,12 +1068,24 @@ class Pellematic extends IPSModule
      * Lauf idempotent bleibt. Betroffen sind ausschliesslich die eigenen
      * bl_-Verknuepfungen, niemals die Zielvariablen selbst.
      */
-    private function syncLinks(): void
+    private function syncLinks(bool $gewuenscht = true): void
     {
         if (!function_exists('IPS_GetChildrenIDs')) {
             return;
         }
         $soll = [];
+        if (!$gewuenscht) {
+            // Abgeschaltet heisst auch: die vorhandenen wieder wegraeumen. Ein
+            // Schalter, der nur beim Einschalten wirkt, hinterlaesst Altlasten.
+            foreach (@IPS_GetChildrenIDs($this->InstanceID) ?: [] as $kid) {
+                $o = @IPS_GetObject($kid);
+                if (is_array($o) && (int) $o['ObjectType'] === 6
+                    && str_starts_with((string) $o['ObjectIdent'], 'bl_')) {
+                    @IPS_DeleteLink($kid);
+                }
+            }
+            return;
+        }
         foreach ($this->mappingRows() as $row) {
             if (empty($row['Active'])) {
                 continue;
@@ -2070,7 +2086,9 @@ class Pellematic extends IPSModule
                     ['type' => 'CheckBox', 'name' => 'CreateMissing',
                         'caption' => 'Nicht zugeordnete Größen zusätzlich unter der Instanz anlegen'],
                     ['type' => 'CheckBox', 'name' => 'CreateLinks',
-                        'caption' => 'Verknüpfungen auf die zugeordneten Variablen anlegen'],
+                        'caption' => 'Verknüpfungen der eigenen Variablen in den Kategorien anlegen'],
+                    ['type' => 'CheckBox', 'name' => 'MirrorLinks',
+                        'caption' => 'Zusätzlich Verknüpfungen unter der Instanz auf die alten Variablen (selten nötig)'],
                     ['type' => 'CheckBox', 'name' => 'ForecastJson',
                         'caption' => 'Wettervorhersage als ein JSON (Format des Wetter-Widgets) statt als 25 Einzelvariablen'],
                     ['type' => 'CheckBox', 'name' => 'AutoSort',
