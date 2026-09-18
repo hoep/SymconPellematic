@@ -67,6 +67,19 @@ Dieses Modul macht drei Dinge anders:
 - **Es benennt nichts um und verschiebt nichts** — außer auf ausdrücklichen
   Knopfdruck (`OKP_Adopt`), und auch dann bleibt jede Objekt-ID erhalten.
 
+
+## Installation
+
+Konsole → *Kern-Instanzen* → **Modules** → Hinzufuegen:
+
+```
+https://github.com/hoep/SymconPellematic
+```
+
+Voraussetzung ist eine OEkoFEN-Pellematic mit erreichbarer JSON-Schnittstelle
+(Touch-Display: *Allgemein → Netzwerk → JSON-Schnittstelle*) und IP-Symcon ab
+Kernel 7.1.
+
 ## Einrichtung in drei Stufen
 
 ### Stufe 0 — Trockenlauf (Auslieferungszustand)

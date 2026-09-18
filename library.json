@@ -3,6 +3,9 @@
     "author": "Hoep",
     "name": "Pellematic",
     "url": "https://github.com/hoep/SymconPellematic",
+    "compatibility": {
+        "version": "7.1"
+    },
     "version": "0.1.0",
     "build": 0,
     "date": 0
