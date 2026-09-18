@@ -17,7 +17,7 @@
   "L_starttime":{"val":810, "factor":1, "min":-32768, "max":32767, "text":"Startzeit"}, 
   "L_endtime":{"val":1730, "factor":1, "min":-32768, "max":32767, "text":"Endzeit"}, 
   "L_source":{"val":"https://www.openweathermap.org", "length":20, "text":"Info"}, 
-  "L_location":{"val":"Musterhuegeln|AT|7871034", "length":20, "text":"Ort"}, 
+  "L_location":{"val":"Musterhügeln|AT|0000000", "length":20, "text":"Ort"}, 
   "cloud_limit":{"val":55, "unit":"%", "factor":1, "min":0, "max":100, "text":"Bewölkungslimit"}, 
   "hysteresys":{"val":-40, "unit":"K", "factor":0.1, "min":-200, "max":0, "text":"Abbruchtmp. Differenz"}, 
   "offtemp":{"val":-100, "unit":"°C", "factor":0.1, "min":-300, "max":200, "text":"Abschalttemperatur"}, 

@@ -42,7 +42,7 @@ pruef('Tageswert hat Hoechst- und Tiefstwert',
 
 pruef('aktueller Wert aus der Anlage (18,0 Grad)', abs(((float) ($v['current']['temp'] ?? 0)) - 18.0) < 0.01,
     (string) ($v['current']['temp'] ?? 'null'));
-pruef('Ort aus der Anlage', ($v['ort'] ?? '') === 'Musterhuegeln', (string) ($v['ort'] ?? ''));
+pruef('Ort aus der Anlage', ($v['ort'] ?? '') === 'Musterhügeln', (string) ($v['ort'] ?? ''));
 
 // Das Wetter-Widget erkennt OWM an genau diesen Merkmalen (weather.js, wDetect)
 pruef('das Widget erkennt das Format als OWM',

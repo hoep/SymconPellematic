@@ -89,7 +89,7 @@ Statuswert; die Reihe wird ab diesem Zeitpunkt wieder brauchbar.
 ### Und ein vierter, der keiner ist
 
 `weather.L_temp` (#<ID> „Aussen") ist die Prognose von OpenWeatherMap für
-Musterhuegeln, **nicht** der Fühler der Anlage. Der echte Fühler ist
+der Vorhersageort, **nicht** der Fühler der Anlage. Der echte Fühler ist
 `system.L_ambient` (bei der Messung 20,2 gegen 18,0 Grad). An dieser Variable
 hängen 13 Jahre Historie und vier Fremdskripte. Die Quelle darf **nicht
 stillschweigend** umgestellt werden — dafür gibt es das Formularfeld
@@ -260,7 +260,7 @@ Sie wird vom Modul NICHT nach #<ID> gespiegelt: eine Reihe, die dreizehn Jahre
 lang eine Fehlanzeige trug, wird nicht rueckwirkend zur Messreihe umgedeutet.
 
 Offen und bewusst nicht entschieden: **Aussen** #<ID> wird weiterhin aus
-`weather.L_temp` gefuellt (der Vorhersagewert fuer Musterhuegeln, nicht der
+`weather.L_temp` gefuellt (der Vorhersagewert fuer den Ort, nicht der
 Fuehler der Anlage). Vier Fremdskripte haengen an dieser Variablen, und die
 Reihe reicht dreizehn Jahre zurueck. Der echte Fuehler `system.L_ambient` steht
 als eigene Variable daneben zur Verfuegung.

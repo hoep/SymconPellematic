@@ -68,7 +68,7 @@ final class Forecast
             $out['quelle'] = (string) $quelle;
         }
         if ($ort !== null && $ort !== '') {
-            // "Musterhuegeln|AT|7871034" - der Ort ist das erste Feld.
+            // "Musterhügeln|AT|0000000" - der Ort ist das erste Feld.
             $out['ort'] = explode('|', (string) $ort)[0];
         }
         $out['stand'] = $jetzt;

@@ -168,7 +168,7 @@ Sperrliste, durch keinen Schalter erreichbar).
 | `L_starttime` | - | 1 | -32768..32767 | Startzeit | 810 | nein (L\_) |
 | `L_endtime` | - | 1 | -32768..32767 | Endzeit | 1730 | nein (L\_) |
 | `L_source` | - | 1 | - | Info | https://www.openweathermap.org | nein (L\_) |
-| `L_location` | - | 1 | - | Ort | Musterhuegeln|AT|7871034 | nein (L\_) |
+| `L_location` | - | 1 | - | Ort | Musterhügeln|AT|0000000 | nein (L\_) |
 | `cloud_limit` | % | 1 | 0..100 | Bewölkungslimit | 55 | comfort |
 | `hysteresys` | K | 0.1 | -200..0 | Abbruchtmp. Differenz | -4 | comfort |
 | `offtemp` | °C | 0.1 | -300..200 | Abschalttemperatur | -10 | comfort |
